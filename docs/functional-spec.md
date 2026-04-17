@@ -2,7 +2,7 @@
 
 Project: r2po-init
 Version: 0.1
-Status: draft
+Status: approved
 Last updated: 2026-04-17
 Author: Product Owner (R2PO)
 
