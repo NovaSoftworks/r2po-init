@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from . import github as gh
+from . import templates
 from .constants import GITHUB_ORG
 
 
@@ -37,6 +38,12 @@ def run(
     Returns:
         Result indicating success or failure with details.
     """
+    # Validate source templates before touching GitHub (fail fast, no cleanup needed).
+    try:
+        templates.validate_source()
+    except templates.SourceNotFoundError as e:
+        return Result(success=False, error_message=str(e))
+
     # Validate gh token before touching GitHub.
     token = gh.get_token()
     if not token:
@@ -54,8 +61,12 @@ def run(
         created_repo = gh.create_repo(client, repo_name, description)
         on_step("Create repository", True)
 
-        # Steps for seeding and committing are added in stories #6 and #7.
-        # For now, return success once the repo exists.
+        # Step 2: Seed templates into a local temp directory.
+        work_dir = Path(tempfile.mkdtemp())
+        templates.seed(work_dir, repo_name, description)
+        on_step("Seed templates", True)
+
+        # Step for committing is added in story #7.
         return Result(
             success=True,
             repo_url=created_repo.html_url,
