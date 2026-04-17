@@ -92,6 +92,35 @@ def delete_repo(client: Github, name: str) -> None:
         raise
 
 
+def apply_labels(client: Github, repo_name: str) -> None:
+    """Apply standard R2PO labels to the repository, overriding any existing ones.
+
+    Creates a label if it does not exist; updates color and description if it does.
+
+    Args:
+        client: An authenticated Github client.
+        repo_name: Name of the repository within GITHUB_ORG.
+    """
+    from .constants import R2PO_LABELS
+
+    repo = client.get_organization(GITHUB_ORG).get_repo(repo_name)
+    existing = {label.name: label for label in repo.get_labels()}
+
+    for label_def in R2PO_LABELS:
+        if label_def.name in existing:
+            existing[label_def.name].edit(
+                name=label_def.name,
+                color=label_def.color,
+                description=label_def.description,
+            )
+        else:
+            repo.create_label(
+                name=label_def.name,
+                color=label_def.color,
+                description=label_def.description,
+            )
+
+
 def _is_name_taken_error(exc: GithubException) -> bool:
     """Return True if the 422 exception indicates the repo name is already taken."""
     errors = exc.data.get("errors", [])

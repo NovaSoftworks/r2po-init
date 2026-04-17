@@ -135,6 +135,7 @@ class TestInitializerFullHappyPath:
              patch("r2po_init.initializer.gh.get_token", return_value="fake-token"), \
              patch("r2po_init.initializer.gh.create_client"), \
              patch("r2po_init.initializer.gh.create_repo", return_value=mock_repo), \
+             patch("r2po_init.initializer.gh.apply_labels"), \
              patch("r2po_init.initializer.templates.seed"), \
              patch("r2po_init.initializer.git_ops.commit_and_push",
                    return_value=MagicMock(

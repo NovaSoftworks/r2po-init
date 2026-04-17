@@ -62,12 +62,16 @@ def run(
         created_repo = gh.create_repo(client, repo_name, description)
         on_step("Create repository", True)
 
-        # Step 2: Seed templates into a local temp directory.
+        # Step 2: Apply R2PO labels.
+        gh.apply_labels(client, repo_name)
+        on_step("Apply labels", True)
+
+        # Step 3: Seed templates into a local temp directory.
         work_dir = Path(tempfile.mkdtemp())
         templates.seed(work_dir, repo_name, description)
         on_step("Seed templates", True)
 
-        # Step 3: Commit all seeded files and push.
+        # Step 5: Commit all seeded files and push.
         push_result = git_ops.commit_and_push(
             work_dir, created_repo.clone_url, token, FIRST_COMMIT_MESSAGE
         )

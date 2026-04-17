@@ -1,6 +1,6 @@
-"""Tests for GitHub API operations (story #4)."""
+"""Tests for GitHub API operations (stories #4, #5)."""
 
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, call, patch, PropertyMock
 
 import pytest
 from github import GithubException
@@ -10,10 +10,11 @@ from r2po_init.github import (
     create_client,
     create_repo,
     delete_repo,
+    apply_labels,
     RepoExistsError,
     AuthError,
 )
-from r2po_init.constants import GITHUB_ORG
+from r2po_init.constants import GITHUB_ORG, R2PO_LABELS
 
 
 class TestGetToken:
@@ -111,6 +112,65 @@ class TestDeleteRepo:
         delete_repo(client, "nonexistent-repo")
 
 
+class TestApplyLabels:
+    def _make_client(self, existing_names=None):
+        """Build a mock client whose repo.get_labels() returns the given label names."""
+        client = MagicMock()
+        repo = client.get_organization.return_value.get_repo.return_value
+        existing_names = existing_names or []
+        label_mocks = []
+        for n in existing_names:
+            m = MagicMock()
+            m.name = n  # 'name' is a special MagicMock param; set as attribute instead
+            label_mocks.append(m)
+        repo.get_labels.return_value = label_mocks
+        return client, repo
+
+    def test_should_create_all_labels_when_none_exist(self):
+        client, repo = self._make_client(existing_names=[])
+        apply_labels(client, "test-repo")
+        assert repo.create_label.call_count == len(R2PO_LABELS)
+
+    def test_should_create_label_with_correct_attributes(self):
+        client, repo = self._make_client(existing_names=[])
+        apply_labels(client, "test-repo")
+        first_label = R2PO_LABELS[0]
+        repo.create_label.assert_any_call(
+            name=first_label.name,
+            color=first_label.color,
+            description=first_label.description,
+        )
+
+    def test_should_update_existing_labels_instead_of_creating(self):
+        existing = [label.name for label in R2PO_LABELS]
+        client, repo = self._make_client(existing_names=existing)
+        apply_labels(client, "test-repo")
+        assert repo.create_label.call_count == 0
+        assert repo.get_labels.return_value[0].edit.call_count == 1
+
+    def test_should_create_new_and_update_existing_labels(self):
+        client, repo = self._make_client(existing_names=["epic"])
+        apply_labels(client, "test-repo")
+        # "epic" exists → edit; others → create
+        assert repo.create_label.call_count == len(R2PO_LABELS) - 1
+
+    def test_should_update_existing_label_with_correct_color(self):
+        epic_label_def = next(l for l in R2PO_LABELS if l.name == "epic")
+        client, repo = self._make_client(existing_names=["epic"])
+        apply_labels(client, "test-repo")
+        epic_mock = repo.get_labels.return_value[0]
+        epic_mock.edit.assert_called_once_with(
+            name="epic",
+            color=epic_label_def.color,
+            description=epic_label_def.description,
+        )
+
+    def test_should_use_correct_repo(self):
+        client, _ = self._make_client()
+        apply_labels(client, "my-repo")
+        client.get_organization.return_value.get_repo.assert_called_with("my-repo")
+
+
 class TestInitializerWithGitHub:
     """Integration tests for initializer.run() covering story #4 scenarios."""
 
@@ -121,6 +181,7 @@ class TestInitializerWithGitHub:
         with patch("r2po_init.initializer.gh.get_token", return_value="fake-token"), \
              patch("r2po_init.initializer.gh.create_client") as mock_client_factory, \
              patch("r2po_init.initializer.gh.create_repo", **patches.get("create_repo", {"return_value": MagicMock(html_url="https://github.com/NovaSoftworks/test-repo")})), \
+             patch("r2po_init.initializer.gh.apply_labels"), \
              patch("r2po_init.initializer.gh.delete_repo"):
             result = initializer.run(repo_name, description, on_step=lambda s, ok: steps.append((s, ok)))
 
