@@ -30,6 +30,7 @@ class TestRollback:
                 raise RuntimeError("Simulated seed failure")
 
         with patch("r2po_init.initializer.templates.validate_source"), \
+             patch("r2po_init.initializer.templates.parse_labels", return_value=[]), \
              patch("r2po_init.initializer.gh.get_token", return_value="fake-token"), \
              patch("r2po_init.initializer.gh.create_client"), \
              patch("r2po_init.initializer.gh.create_repo", return_value=mock_repo), \
@@ -65,6 +66,7 @@ class TestRollback:
         from r2po_init.github import RepoExistsError
 
         with patch("r2po_init.initializer.templates.validate_source"), \
+             patch("r2po_init.initializer.templates.parse_labels", return_value=[]), \
              patch("r2po_init.initializer.gh.get_token", return_value="fake-token"), \
              patch("r2po_init.initializer.gh.create_client"), \
              patch("r2po_init.initializer.gh.create_repo",

@@ -125,21 +125,22 @@ def delete_repo(client: Github, name: str) -> None:
         raise
 
 
-def apply_labels(client: Github, repo_name: str) -> None:
-    """Apply standard R2PO labels to the repository, overriding any existing ones.
+def apply_labels(client: Github, repo_name: str, labels: list) -> None:
+    """Apply R2PO labels to the repository, overriding any existing ones.
 
     Creates a label if it does not exist; updates color and description if it does.
+    The label definitions are passed in (parsed from r2po-team README at call time)
+    so this function has no dependency on hardcoded constants.
 
     Args:
         client: An authenticated Github client.
         repo_name: Name of the repository within GITHUB_ORG.
+        labels: List of LabelDefinition instances to apply.
     """
-    from .constants import R2PO_LABELS
-
     repo = client.get_organization(GITHUB_ORG).get_repo(repo_name)
     existing = {label.name: label for label in _retryable_api_call(repo.get_labels)}
 
-    for label_def in R2PO_LABELS:
+    for label_def in labels:
         if label_def.name in existing:
             _retryable_api_call(
                 existing[label_def.name].edit,

@@ -47,9 +47,10 @@ def run(
     Returns:
         Result indicating success or failure with details.
     """
-    # Validate source templates before touching GitHub (fail fast, no cleanup needed).
+    # Validate source and parse r2po-team config before touching GitHub (fail fast).
     try:
         templates.validate_source()
+        parsed_labels = templates.parse_labels()
     except templates.SourceNotFoundError as e:
         return Result(success=False, error_message=str(e))
 
@@ -79,7 +80,7 @@ def run(
         on_step("Create repository", True)
 
         # Step 2: Apply R2PO labels.
-        gh.apply_labels(client, repo_name)
+        gh.apply_labels(client, repo_name, parsed_labels)
         steps_completed.append("Apply labels")
         on_step("Apply labels", True)
 
