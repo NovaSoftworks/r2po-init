@@ -75,8 +75,113 @@ Two test-infrastructure defects found and fixed:
 
 ---
 
+---
+
+# Iteration-2 Test Report
+
+Project: r2po-init
+Iteration: iteration-2
+Date range: 2026-04-17 to 2026-04-17
+Author: QA (R2PO)
+
+---
+
+## Summary
+
+| Metric | Count |
+|---|---|
+| Stories in scope | 6 |
+| Test cases written | 49 (108 total cumulative) |
+| Passed | 49 |
+| Failed | 0 |
+| Skipped | 0 |
+| Bugs filed | 0 |
+
+**Overall assessment: shippable.** All six iteration-2 stories are implemented and tested. The tool now applies R2PO labels, retries transient API errors, rolls back on failure, writes an error report on abort, and supports interactive prompt mode with full progress output.
+
+---
+
+## Story results
+
+### #5 — Apply R2PO labels (6 tests)
+
+All acceptance criteria met:
+- `apply_labels` creates all 6 R2PO labels when none exist.
+- `apply_labels` updates color and description when a label already exists (override, not skip).
+- Mixed case (some existing, some new) handled correctly.
+- Wired into initializer between Create repository and Seed templates.
+- Labels applied via `_retryable_api_call` — transient failures are retried.
+
+### #11 — Retry on network errors (14 tests)
+
+All acceptance criteria met:
+- `_retryable_api_call` retries on 5xx GitHub errors.
+- `_retryable_api_call` retries on `ConnectionError` and `OSError`.
+- Does NOT retry on 4xx (401, 403, 404, 422) — these are non-retryable.
+- Sleeps `GITHUB_API_RETRY_DELAY_SECONDS` between attempts.
+- Does not sleep after the final failed attempt.
+- Raises last error after `GITHUB_API_RETRY_COUNT` exhausted.
+- `create_repo` retries the raw API call; exception classification happens after retry gives up.
+- `apply_labels` wraps all label API calls with retry.
+
+### #12 — Rollback on failure (7 tests)
+
+All acceptance criteria met:
+- On unexpected failure after repo creation, `delete_repo` is called.
+- `RepoExistsError` does NOT trigger rollback (no repo was created).
+- On seed failure, rollback still deletes the repo.
+- `on_step("Rollback", True)` fired for visibility.
+- Rollback uses a journal (`list[_RollbackAction]`) iterated in reverse.
+- Best-effort: rollback failure is silenced, not re-raised.
+
+### #13 — Error report on abort (10 tests)
+
+All acceptance criteria met:
+- `write(report)` creates a `.txt` file in dest_dir (defaults to cwd).
+- Filename format: `r2po-init-error-<YYYY-MM-DDTHH-MM-SS>.txt`.
+- Report contains repo name, error message, steps completed, rollback actions.
+- Steps and rollback sections omitted when empty.
+- Error report path included in `Result.error_report_path`.
+- CLI prints error report path when failure includes one.
+
+### #9 — Interactive prompt mode (5 tests)
+
+All acceptance criteria met:
+- Running `r2po-init` without arguments prompts for name.
+- Invalid name re-prompts until a valid one is entered.
+- Description prompted with default `R2PO project: <name>`.
+- Pressing Enter accepts the default description.
+- In argument mode, description is never prompted.
+
+### #10 — Progress output and exit codes (8 tests)
+
+All acceptance criteria met:
+- Header "Initializing NovaSoftworks/<name>…" printed before steps.
+- Each step printed as it completes via `on_step` callback.
+- "Done. <url>" on success.
+- "Failed: <message>" on fatal failure.
+- Push failure warning printed; exit code remains 0.
+- Error report path printed when present.
+- Exit code 0 on success and non-fatal push failure.
+- Exit code 1 on fatal failure.
+
+### README (not a story — user-requested)
+
+`README.md` written covering: prerequisites, installation, usage (argument and interactive mode), repo naming rules, seeded files list, exit codes, and known limitations.
+
+---
+
+## Risks for iteration-3
+
+- **No dry-run mode**: `r2po-init --dry-run` to preview what would happen without touching GitHub.
+- **No undo command**: `r2po-init --delete <name>` to tear down a repo initialized by mistake.
+- **PATH not set automatically**: `~/.local/bin` must be on PATH; setup could be automated by a post-install script.
+
+---
+
 ## Change log
 
 | Version | Date | Change | Author |
 |---|---|---|---|
 | 0.1 | 2026-04-17 | Iteration-1 report | QA |
+| 0.2 | 2026-04-17 | Iteration-2 report appended | QA |
