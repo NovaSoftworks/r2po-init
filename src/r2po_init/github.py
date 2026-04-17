@@ -1,11 +1,44 @@
 """GitHub API operations for r2po-init."""
 
 import subprocess
+import time
 from typing import Optional
 
 from github import Github, GithubException
 
-from .constants import GITHUB_ORG
+from .constants import GITHUB_ORG, GITHUB_API_RETRY_COUNT, GITHUB_API_RETRY_DELAY_SECONDS
+
+
+def _retryable_api_call(func, *args, **kwargs):
+    """Call func, retrying on transient 5xx or network errors.
+
+    Retries up to GITHUB_API_RETRY_COUNT times with GITHUB_API_RETRY_DELAY_SECONDS between
+    attempts. 4xx errors and non-HTTP exceptions are re-raised immediately without retry.
+
+    Args:
+        func: Callable to invoke.
+        *args, **kwargs: Forwarded to func.
+
+    Returns:
+        The return value of func on success.
+
+    Raises:
+        The last exception if all retry attempts are exhausted.
+    """
+    last_error: Exception | None = None
+    for attempt in range(GITHUB_API_RETRY_COUNT):
+        try:
+            return func(*args, **kwargs)
+        except GithubException as e:
+            if e.status >= 500:
+                last_error = e
+            else:
+                raise  # 4xx is non-retryable
+        except (ConnectionError, OSError) as e:
+            last_error = e
+        if attempt < GITHUB_API_RETRY_COUNT - 1:
+            time.sleep(GITHUB_API_RETRY_DELAY_SECONDS)
+    raise last_error  # type: ignore[misc]
 
 
 class RepoExistsError(Exception):
@@ -61,7 +94,7 @@ def create_repo(client: Github, name: str, description: str):
     """
     try:
         org = client.get_organization(GITHUB_ORG)
-        return org.create_repo(name, description=description, private=True)
+        return _retryable_api_call(org.create_repo, name, description=description, private=True)
     except GithubException as e:
         if e.status == 422 and _is_name_taken_error(e):
             raise RepoExistsError(
@@ -104,17 +137,19 @@ def apply_labels(client: Github, repo_name: str) -> None:
     from .constants import R2PO_LABELS
 
     repo = client.get_organization(GITHUB_ORG).get_repo(repo_name)
-    existing = {label.name: label for label in repo.get_labels()}
+    existing = {label.name: label for label in _retryable_api_call(repo.get_labels)}
 
     for label_def in R2PO_LABELS:
         if label_def.name in existing:
-            existing[label_def.name].edit(
+            _retryable_api_call(
+                existing[label_def.name].edit,
                 name=label_def.name,
                 color=label_def.color,
                 description=label_def.description,
             )
         else:
-            repo.create_label(
+            _retryable_api_call(
+                repo.create_label,
                 name=label_def.name,
                 color=label_def.color,
                 description=label_def.description,
