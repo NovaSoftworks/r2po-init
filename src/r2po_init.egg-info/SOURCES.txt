@@ -1,0 +1,13 @@
+pyproject.toml
+src/r2po_init/__init__.py
+src/r2po_init/__main__.py
+src/r2po_init/cli.py
+src/r2po_init/constants.py
+src/r2po_init/initializer.py
+src/r2po_init.egg-info/PKG-INFO
+src/r2po_init.egg-info/SOURCES.txt
+src/r2po_init.egg-info/dependency_links.txt
+src/r2po_init.egg-info/entry_points.txt
+src/r2po_init.egg-info/requires.txt
+src/r2po_init.egg-info/top_level.txt
+tests/test_cli.py
