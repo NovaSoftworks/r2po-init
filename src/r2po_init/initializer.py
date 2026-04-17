@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
+from . import git as git_ops
 from . import github as gh
 from . import templates
-from .constants import GITHUB_ORG
+from .constants import FIRST_COMMIT_MESSAGE, GITHUB_ORG
 
 
 @dataclass
@@ -66,11 +67,17 @@ def run(
         templates.seed(work_dir, repo_name, description)
         on_step("Seed templates", True)
 
-        # Step for committing is added in story #7.
+        # Step 3: Commit all seeded files and push.
+        push_result = git_ops.commit_and_push(
+            work_dir, created_repo.clone_url, token, FIRST_COMMIT_MESSAGE
+        )
+        on_step("Commit and push", push_result.committed)
+
         return Result(
             success=True,
             repo_url=created_repo.html_url,
-            push_succeeded=None,
+            push_succeeded=push_result.pushed,
+            push_error=push_result.push_error,
         )
 
     except gh.RepoExistsError as e:
