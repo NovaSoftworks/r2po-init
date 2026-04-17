@@ -1,2 +1,0 @@
-[console_scripts]
-r2po-init = r2po_init.cli:app
