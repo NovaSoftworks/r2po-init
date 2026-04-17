@@ -2,14 +2,16 @@
 
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
 from . import git as git_ops
 from . import github as gh
+from . import reporter
 from . import templates
 from .constants import FIRST_COMMIT_MESSAGE, GITHUB_ORG
+from .reporter import ErrorReport
 
 
 @dataclass
@@ -22,6 +24,12 @@ class Result:
     push_error: Optional[str] = None
     error_message: Optional[str] = None
     error_report_path: Optional[Path] = None
+
+
+@dataclass
+class _RollbackAction:
+    name: str
+    undo: Callable[[], None]
 
 
 def run(
@@ -54,24 +62,34 @@ def run(
         )
 
     client = gh.create_client(token)
-    created_repo = None
+    rollback_journal: list[_RollbackAction] = []
+    steps_completed: list[str] = []
     work_dir: Optional[Path] = None
 
     try:
         # Step 1: Create the repository.
         created_repo = gh.create_repo(client, repo_name, description)
+        rollback_journal.append(
+            _RollbackAction(
+                name=f"Delete repository {GITHUB_ORG}/{repo_name}",
+                undo=lambda: gh.delete_repo(client, repo_name),
+            )
+        )
+        steps_completed.append("Create repository")
         on_step("Create repository", True)
 
         # Step 2: Apply R2PO labels.
         gh.apply_labels(client, repo_name)
+        steps_completed.append("Apply labels")
         on_step("Apply labels", True)
 
         # Step 3: Seed templates into a local temp directory.
         work_dir = Path(tempfile.mkdtemp())
         templates.seed(work_dir, repo_name, description)
+        steps_completed.append("Seed templates")
         on_step("Seed templates", True)
 
-        # Step 5: Commit all seeded files and push.
+        # Step 4: Commit all seeded files and push.
         push_result = git_ops.commit_and_push(
             work_dir, created_repo.clone_url, token, FIRST_COMMIT_MESSAGE
         )
@@ -93,15 +111,41 @@ def run(
         return Result(success=False, error_message=str(e))
 
     except Exception as e:
-        on_step("Create repository", False)
-        # Rollback: delete the repo if it was created.
-        if created_repo is not None:
-            try:
-                gh.delete_repo(client, repo_name)
-            except Exception:
-                pass  # Best-effort; full rollback is implemented in story #12.
-        return Result(success=False, error_message=f"Unexpected error: {e}")
+        error_message = str(e)
+        rollback_names = _rollback(rollback_journal)
+        on_step("Rollback", True)
+
+        error_report_path = reporter.write(
+            ErrorReport(
+                repo_name=repo_name,
+                description=description,
+                error_message=error_message,
+                steps_completed=steps_completed,
+                rollback_actions=rollback_names,
+            )
+        )
+        return Result(
+            success=False,
+            error_message=error_message,
+            error_report_path=error_report_path,
+        )
 
     finally:
         if work_dir is not None:
             shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def _rollback(journal: list[_RollbackAction]) -> list[str]:
+    """Execute rollback actions in reverse order.
+
+    Returns:
+        Names of rollback actions that were attempted.
+    """
+    attempted = []
+    for action in reversed(journal):
+        attempted.append(action.name)
+        try:
+            action.undo()
+        except Exception:
+            pass  # Best-effort; log is in the error report.
+    return attempted
